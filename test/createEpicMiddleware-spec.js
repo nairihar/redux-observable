@@ -7,6 +7,12 @@ import { createEpicMiddleware, combineEpics, ActionsObservable, StateObservable,
 import { of, empty, merge } from 'rxjs';
 import { mapTo, map, ignoreElements, distinctUntilChanged } from 'rxjs/operators';
 
+const isReduxInitAction = (action) => !!action.type.match(/@@redux\/INIT/);
+const removeReduxInit = (actions) =>
+  actions.filter(action =>
+    !isReduxInitAction(action)
+  );
+
 describe('createEpicMiddleware', () => {
   it('should provide epics a stream of action$ and a stream of state$', (done) => {
     const reducer = (state = [], action) => state.concat(action);
@@ -61,7 +67,9 @@ describe('createEpicMiddleware', () => {
   it('should update state$ after an action goes through reducers but before epics', () => {
     const actions = [];
     const reducer = (state = 0, action) => {
-      actions.push(action);
+      if (!isReduxInitAction(action)) {
+        actions.push(action);
+      }
 
       if (action.type === 'PING') {
         return state + 1;
@@ -87,9 +95,8 @@ describe('createEpicMiddleware', () => {
     store.dispatch({ type: 'PING' });
 
     expect(store.getState()).to.equal(2);
+
     expect(actions).to.deep.equal([{
-      type: '@@redux/INIT'
-    }, {
       type: 'PING'
     }, {
       type: 'PONG',
@@ -127,9 +134,9 @@ describe('createEpicMiddleware', () => {
 
     expect(console.warn.callCount).to.equal(1);
     expect(console.warn.getCall(0).args[0]).to.equal('redux-observable | WARNING: You accessed state$.value inside one of your Epics, before your reducers have run for the first time, so there is no state yet. You\'ll need to wait until after the first action (@@redux/INIT) is dispatched or by using state$ as an Observable.');
-    expect(store.getState()).to.deep.equal([{
-      type: '@@redux/INIT'
-    }, {
+
+    const state = removeReduxInit(store.getState());
+    expect(state).to.deep.equal([{
       type: 'PONG',
       state: undefined
     }, {
@@ -185,8 +192,8 @@ describe('createEpicMiddleware', () => {
     store.dispatch({ type: 'FIRE_1' });
     store.dispatch({ type: 'FIRE_2' });
 
-    expect(store.getState()).to.deep.equal([
-      { type: '@@redux/INIT' },
+    const state = removeReduxInit(store.getState());
+    expect(state).to.deep.equal([
       { type: 'FIRE_1' },
       { type: 'ACTION_1' },
       { type: 'FIRE_2' },
